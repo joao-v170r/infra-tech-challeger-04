@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # Serviço Cliente
+  cliente-app:
+    build:
+      context: ./cliente  # Ajuste para o caminho do seu projeto cliente
+      dockerfile: Dockerfile
+    container_name: cliente-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@mongo-cliente:27017/db_cliente?authSource=admin
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      mongo-cliente:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongo-cliente:
+    image: mongo:7.0
+    container_name: mongo-cliente
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_cliente_data:/data/db
+      - ./cliente-service/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=db_cliente
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+    networks:
+      - microservices-net
+    restart: unless-stopped
+  # Serviço Pedido
+  pedido-app:
+    build:
+      context: ./pedido  # Ajuste para o caminho do seu projeto pedido
+      dockerfile: Dockerfile
+    container_name: pedido-app
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@mongodb-pedido:27017/db_pedido?authSource=admin
+      - SPRING_PROFILES_ACTIVE=prod
+      - CLIENTE_SERVICE_URL=http://cliente-app:8080
+      - PAGAMENTO_SERVICE_URL=http://pagamento-app:8082
+    depends_on:
+      mongodb-pedido:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb-pedido:
+    image: mongo:7.0
+    container_name: mongodb-pedido
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_pedido_data:/data/db
+      - ./pedido-service/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=db_pedido
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  # Serviço Pagament
+  pagamento-app:
+    build:
+      context: ./pagamento  # Ajuste para o caminho do seu projeto pedido
+      dockerfile: Dockerfile
+    container_name: pagamento-app
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@mongodb-pagamento:27017/db_pagamento?authSource=admin
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      mongodb-pagamento:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb-pagamento:
+    image: mongo:7.0
+    container_name: mongodb-pagamento
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongodb_pagamento_data:/data/db
+      - ./pagamento-service/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=db_pagamento
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+networks:
+  microservices-net:
+    driver: bridge
+    name: microservices-net
+volumes:
+  mongodb_cliente_data:
+  mongodb_pedido_data:
+  mongodb_pagamento_data:
