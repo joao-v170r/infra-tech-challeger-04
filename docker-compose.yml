@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Serviço Cliente
   cliente-app:
@@ -57,6 +55,8 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - CLIENTE_SERVICE_URL=http://cliente-app:8080
       - PAGAMENTO_SERVICE_URL=http://pagamento-app:8082
+      - PAGAMENTO_PRODUTO_URL=http://produto-app:8083
+      - PAGAMENTO_ESTOQUE_URL=http://estoque-app:8084
     depends_on:
       mongodb-pedido:
         condition: service_healthy
@@ -134,6 +134,94 @@ services:
       - microservices-net
     restart: unless-stopped
 
+  # Serviço Estoque
+  estoque-app:
+    build:
+      context: ./micro-estoque-clean-arch  # Ajuste para o caminho do seu projeto pedido
+      dockerfile: Dockerfile
+    container_name: estoque-app
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@mongodb-estoque:27017/db_estoque?authSource=admin
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      mongodb-estoque:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8084/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb-estoque:
+    image: mongo:7.0
+    container_name: mongodb-estoque
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongodb_estoque_data:/data/db
+      - ./estoque-service/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=db_estoque
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  # Serviço Produto
+  produto-app:
+    build:
+      context: ./micro-produto-clean-arch  # Ajuste para o caminho do seu microserviço
+      dockerfile: Dockerfile
+    container_name: produto-app
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://admin:admin123@mongodb-produto:27017/db_produto?authSource=admin
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      mongodb-produto:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8083/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb-produto:
+    image: mongo:7.0
+    container_name: mongodb-produto
+    ports:
+      - "27016:27017"
+    volumes:
+      - mongodb_produto_data:/data/db
+      - ./produto-service/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=db_produto
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
 networks:
   microservices-net:
     driver: bridge
@@ -142,3 +230,5 @@ volumes:
   mongodb_cliente_data:
   mongodb_pedido_data:
   mongodb_pagamento_data:
+  mongodb_estoque_data:
+  mongodb_produto_data:
