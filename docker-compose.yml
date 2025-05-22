@@ -244,7 +244,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-        - microservices-net
+      - microservices-net
 
   rabbitmq:
     image: rabbitmq:4.1.0-management
