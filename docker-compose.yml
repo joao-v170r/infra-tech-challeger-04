@@ -2,7 +2,7 @@ services:
   # Serviço Cliente
   cliente-app:
     build:
-      context: ./cliente  # Ajuste para o caminho do seu projeto cliente
+      context: ./micro-cliente-clean-arch  # Ajuste para o caminho do seu projeto cliente
       dockerfile: Dockerfile
     container_name: cliente-app
     ports:
@@ -45,7 +45,7 @@ services:
   # Serviço Pedido
   pedido-app:
     build:
-      context: ./pedido  # Ajuste para o caminho do seu projeto pedido
+      context: ./micro-pedido-clean-arch  # Ajuste para o caminho do seu projeto pedido
       dockerfile: Dockerfile
     container_name: pedido-app
     ports:
@@ -59,6 +59,8 @@ services:
       - PAGAMENTO_ESTOQUE_URL=http://estoque-app:8084
     depends_on:
       mongodb-pedido:
+        condition: service_healthy
+      rabbitmq: # Adicionado: Pedido-app agora espera pelo RabbitMQ
         condition: service_healthy
     networks:
       - microservices-net
@@ -90,10 +92,10 @@ services:
       - microservices-net
     restart: unless-stopped
 
-  # Serviço Pagament
+  # Serviço Pagamento
   pagamento-app:
     build:
-      context: ./pagamento  # Ajuste para o caminho do seu projeto pedido
+      context: ./micro-pagamento-clean-arch  # Ajuste para o caminho do seu projeto pedido
       dockerfile: Dockerfile
     container_name: pagamento-app
     ports:
@@ -222,11 +224,52 @@ services:
       - microservices-net
     restart: unless-stopped
 
+  receiver-app:
+    build:
+      context: ./micro-receiver-clean-arch
+      dockerfile: Dockerfile
+    container_name: receiver-app
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - CLIENTE_SERVICE_URL=http://localhost:8085 # Alterado de localhost:8085
+      - SERVER_PORT=8085
+    depends_on:
+      rabbitmq: # Adicionado a condição de serviço saudável
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8085/actuator/health" ] # Corrigido para apontar para a porta do receiver-app
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+        - microservices-net
+
+  rabbitmq:
+    image: rabbitmq:4.1.0-management
+    container_name: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck: # ADICIONADO HEALTHCHECK AO RABBITMQ
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - microservices-net
+
 networks:
   microservices-net:
     driver: bridge
     name: microservices-net
 volumes:
+  rabbitmq_data:
   mongodb_cliente_data:
   mongodb_pedido_data:
   mongodb_pagamento_data:
